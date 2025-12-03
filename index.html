@@ -16,25 +16,73 @@
     /* 色分けのスタイル */
     .status-open { background-color: #06c755 !important; } /* 緑：空き */
     .status-full { background-color: #aaaaaa !important; pointer-events: none; } /* グレー：他人 */
-    .status-mine { background-color: #fff200b9 !important; } /* 青：自分 */
+    .status-mine { background-color: #3788d8 !important; } /* 青：自分 */
     
     h2 { margin-bottom: 5px; }
-    #status { font-size: 12px; color: #666; margin-bottom: 10px; height: 20px;}
+
+    /* --- ★ここから追加：ローディング画面のデザイン --- */
+    #loading-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(255, 255, 255, 0.9); /* 背景を少し白く透けさせる */
+      display: flex; justify-content: center; align-items: center;
+      flex-direction: column;
+      z-index: 9999; /* 最前面に表示 */
+      transition: opacity 0.3s; /* ふわっと消えるアニメーション */
+    }
+    
+    /* 隠すときのクラス */
+    .hidden { opacity: 0; pointer-events: none; }
+
+    /* くるくる回るスピナー */
+    .spinner {
+      width: 50px; height: 50px;
+      border: 5px solid #f3f3f3; /* 薄いグレー */
+      border-top: 5px solid #06c755; /* LINEグリーン */
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 15px;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    #loading-text {
+      color: #555; font-weight: bold; font-size: 14px;
+    }
+    /* --- 追加ここまで --- */
   </style>
 </head>
 <body>
 
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <div id="loading-text">システム起動中...</div>
+  </div>
+
   <h2>個別指導 カレンダー</h2>
-  <div id="status">読み込み中...</div>
+  
   <div id="calendar"></div>
 
   <script>
-    // ★あなたのIDとURLに書き換えてください
+    // ★★★ 必ず書き換えてください！ ★★★
     const LIFF_ID = '2008601973-nBb3AdkQ'; 
     const GAS_URL = 'https://script.google.com/macros/s/AKfycby92iMQ_xb5Hrv0iAxJiTS2kgt11dNW0EIx4k3qLUIGoLN0TWd4BTSkZWVhn1AR1ja4/exec';
+    // ★★★★★★★★★★★★★★★★★★★★★
 
     let calendar;
-    let myUserId = ''; // 自分のIDを覚えておく場所
+    let myUserId = '';
+
+    // ★便利関数：ローディング操作
+    function showLoading(msg) {
+      document.getElementById('loading-text').innerText = msg;
+      document.getElementById('loading-overlay').classList.remove('hidden');
+    }
+    
+    function hideLoading() {
+      document.getElementById('loading-overlay').classList.add('hidden');
+    }
 
     window.onload = function() {
       initCalendar();
@@ -44,16 +92,16 @@
           if (!liff.isLoggedIn()) {
             liff.login();
           } else {
-            // まず自分のIDを確保してから、データを読みに行く
             liff.getProfile().then(profile => {
               myUserId = profile.userId;
-              document.getElementById('status').innerText = "予約状況を確認中...";
+              // データ取得開始（ローディングの文字を変える）
+              showLoading("空き状況を確認中...");
               fetchData();
             });
           }
         })
         .catch(err => {
-          document.getElementById('status').innerText = "エラー: " + err.code;
+          showLoading("エラーが発生しました: " + err.code);
         });
     };
 
@@ -66,24 +114,18 @@
         headerToolbar: { left: 'prev', center: 'title', right: 'next' },
         
         eventClick: function(info) {
-          // ★ここが分岐点！
           const props = info.event.extendedProps;
-          
           if (props.isMine) {
-            // 自分の予約なら「キャンセル」
             cancelBooking(info.event.id, info.event.start);
           } else if (!props.isBooked) {
-            // 空きなら「予約」
             book(info.event.id, info.event.start);
           }
-          // 他人の予約(isBooked=true)は何もしない
         }
       });
       calendar.render();
     }
 
     function fetchData() {
-      // ★サーバーに「俺(myUserId)の予約はどれ？」と聞く
       fetch(GAS_URL, {
         method: 'POST',
         body: JSON.stringify({ 
@@ -93,20 +135,16 @@
       })
       .then(res => res.json())
       .then(data => {
-        document.getElementById('status').innerText = "";
-        
         const events = data.list.map(item => {
           const startStr = `${item.date}T${item.time}`;
-          
-          // ★状態によって色とタイトルを変える
           let className = 'status-open';
           let title = item.time;
           
           if (item.isMine) {
-            className = 'status-mine'; // 青
+            className = 'status-mine';
             title = '予約中';
           } else if (item.isBooked) {
-            className = 'status-full'; // グレー
+            className = 'status-full';
             title = '満席';
           }
           
@@ -124,9 +162,12 @@
 
         calendar.removeAllEvents();
         calendar.addEventSource(events);
+        
+        // ★データ表示が終わったらローディングを消す！
+        hideLoading();
       })
       .catch(e => {
-        document.getElementById('status').innerText = "通信エラー";
+        showLoading("通信エラー: " + e.message);
       });
     }
 
@@ -134,20 +175,19 @@
       const dateStr = dateObj.toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour:'2-digit', minute:'2-digit'});
       if(!confirm(`${dateStr} を予約しますか？`)) return;
       
-      sendRequest("book", id);
+      sendRequest("book", id, "予約処理中...");
     }
 
-    // ★新機能：キャンセル処理
     function cancelBooking(id, dateObj) {
       const dateStr = dateObj.toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour:'2-digit', minute:'2-digit'});
       if(!confirm(`${dateStr} の予約をキャンセルしますか？`)) return;
       
-      sendRequest("cancel", id);
+      sendRequest("cancel", id, "キャンセル処理中...");
     }
 
-    // 通信処理を共通化
-    function sendRequest(actionName, slotId) {
-      document.getElementById('status').innerText = "処理中...";
+    function sendRequest(actionName, slotId, loadingMsg) {
+      // ★処理中はローディングを出す
+      showLoading(loadingMsg);
       
       liff.getProfile().then(p => {
         fetch(GAS_URL, {
@@ -162,7 +202,12 @@
         .then(res => res.json())
         .then(res => {
           alert(res.message);
-          fetchData(); // 画面更新
+          // 再読み込み（ここでもローディングは出たまま）
+          fetchData(); 
+        })
+        .catch(err => {
+            alert("エラーが発生しました");
+            hideLoading();
         });
       });
     }
