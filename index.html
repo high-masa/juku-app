@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>カレンダー予約</title>
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2.1/sdk.js"></script>
+  
+  <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
+  
+  <style>
+    body { font-family: sans-serif; padding: 10px; text-align: center; font-size: 14px; }
+    #calendar { max-width: 100%; margin: 0 auto; }
+    
+    /* 予定のデザイン調整 */
+    .fc-event { cursor: pointer; border: none; }
+    .status-open { background-color: #06c755 !important; } /* 緑 */
+    .status-full { background-color: #aaaaaa !important; pointer-events: none; } /* グレー */
+    
+    h2 { margin-bottom: 5px; }
+    #status { font-size: 12px; color: #666; margin-bottom: 10px; height: 20px;}
+  </style>
+</head>
+<body>
+
+  <h2>個別指導 カレンダー</h2>
+  <div id="status">読み込み中...</div>
+  
+  <div id="calendar"></div>
+
+  <script>
+    // ★あなたのIDとURLに書き換えてください
+    const LIFF_ID = '2008601973-nBb3AdkQ'; 
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycby92iMQ_xb5Hrv0iAxJiTS2kgt11dNW0EIx4k3qLUIGoLN0TWd4BTSkZWVhn1AR1ja4/exec';
+
+    let calendar; // カレンダー本体
+
+    window.onload = function() {
+      initCalendar(); // 先にカレンダーの枠を作る
+      
+      liff.init({ liffId: LIFF_ID })
+        .then(() => {
+          if (!liff.isLoggedIn()) {
+            liff.login();
+          } else {
+            document.getElementById('status').innerText = "空き状況を取得中...";
+            fetchData();
+          }
+        })
+        .catch(err => {
+          document.getElementById('status').innerText = "エラー: " + err.code;
+        });
+    };
+
+    // 1. カレンダーを表示する準備
+    function initCalendar() {
+      var calendarEl = document.getElementById('calendar');
+      calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth', // 月表示
+        locale: 'ja', // 日本語化
+        height: 'auto',
+        headerToolbar: {
+          left: 'prev',
+          center: 'title',
+          right: 'next'
+        },
+        // イベント（緑の枠）をタップした時の処理
+        eventClick: function(info) {
+          if (info.event.extendedProps.isBooked) return;
+          book(info.event.id, info.event.start);
+        }
+      });
+      calendar.render();
+    }
+
+    // 2. GASからデータを取ってきてカレンダーに配置
+    function fetchData() {
+      fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: "get_data" })
+      })
+      .then(res => res.json())
+      .then(data => {
+        document.getElementById('status').innerText = "";
+        
+        const events = data.list.map(item => {
+          const startStr = `${item.date}T${item.time}`;
+          
+          return {
+            id: item.id,
+            // 講師名を消して時間のみ表示
+            title: item.isBooked ? '満席' : `${item.time}`,
+            
+            start: startStr,
+            classNames: item.isBooked ? ['status-full'] : ['status-open'],
+            extendedProps: {
+              isBooked: item.isBooked
+            }
+          };
+        });
+
+        calendar.removeAllEvents();
+        calendar.addEventSource(events);
+      })
+      .catch(e => {
+        document.getElementById('status').innerText = "通信エラー";
+      });
+    }
+
+    // 3. 予約実行
+    function book(id, dateObj) {
+      const dateStr = dateObj.toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour:'2-digit', minute:'2-digit'});
+      
+      if(!confirm(`${dateStr} の枠を予約しますか？`)) return;
+      document.getElementById('status').innerText = "予約処理中...";
+      
+      liff.getProfile().then(p => {
+        fetch(GAS_URL, {
+          method: 'POST',
+          body: JSON.stringify({ 
+            action: "book", 
+            slotId: id, 
+            userId: p.userId, 
+            userName: p.displayName 
+          })
+        })
+        .then(res => res.json())
+        .then(res => {
+          alert(res.message);
+          fetchData(); // データを再取得して表示更新
+        });
+      });
+    }
+  </script>
+</body>
+</html>
