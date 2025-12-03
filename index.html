@@ -3,86 +3,54 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>カレンダー予約</title>
+  <title>カレンダー予約 (爆速版)</title>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2.1/sdk.js"></script>
   <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
   
   <style>
     body { font-family: sans-serif; padding: 10px; text-align: center; font-size: 14px; }
     #calendar { max-width: 100%; margin: 0 auto; }
-    
     .fc-event { cursor: pointer; border: none; }
-    
-    /* 色分けのスタイル */
-    .status-open { background-color: #06c755 !important; } /* 緑：空き */
-    .status-full { background-color: #aaaaaa !important; pointer-events: none; } /* グレー：他人 */
-    .status-mine { background-color: #3788d8 !important; } /* 青：自分 */
-    
+    .status-open { background-color: #06c755 !important; }
+    .status-full { background-color: #aaaaaa !important; pointer-events: none; }
+    .status-mine { background-color: #3788d8 !important; }
     h2 { margin-bottom: 5px; }
-
-    /* --- ★ここから追加：ローディング画面のデザイン --- */
-    #loading-overlay {
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(255, 255, 255, 0.9); /* 背景を少し白く透けさせる */
-      display: flex; justify-content: center; align-items: center;
-      flex-direction: column;
-      z-index: 9999; /* 最前面に表示 */
-      transition: opacity 0.3s; /* ふわっと消えるアニメーション */
-    }
     
-    /* 隠すときのクラス */
-    .hidden { opacity: 0; pointer-events: none; }
-
-    /* くるくる回るスピナー */
-    .spinner {
-      width: 50px; height: 50px;
-      border: 5px solid #f3f3f3; /* 薄いグレー */
-      border-top: 5px solid #06c755; /* LINEグリーン */
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin-bottom: 15px;
-    }
-    
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-    
-    #loading-text {
-      color: #555; font-weight: bold; font-size: 14px;
-    }
-    /* --- 追加ここまで --- */
+    /* ローディング（一瞬で終わるので簡易的に） */
+    #loading { color: #666; font-size: 12px; height: 20px; }
   </style>
 </head>
 <body>
 
-  <div id="loading-overlay">
-    <div class="spinner"></div>
-    <div id="loading-text">システム起動中...</div>
-  </div>
-
-  <h2>個別指導 カレンダー</h2>
-  
+  <h2>個別指導予約 (Firebase)</h2>
+  <div id="loading">システム接続中...</div>
   <div id="calendar"></div>
 
-  <script>
-    // ★★★ 必ず書き換えてください！ ★★★
+  <script type="module">
+    // 必要な機能をインポート（Googleの倉庫から取ってくる）
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, collection, doc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    // ★★★ さっきメモした「鍵」をここに貼り付けてください！ ★★★
+    const firebaseConfig = {
+      apiKey: "AIzaSyBp3hvhnBWSvq2TYvsTFmnOnqabnY7vx3g", 
+      authDomain: "juku-booking.firebaseapp.com",
+      projectId: "juku-booking",
+      storageBucket: "juku-booking.firebasestorage.app",
+      messagingSenderId: "134258298426",
+      appId: "1:134258298426:web:24d901ef9fc92c9b0daf03"
+    };
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+
+    // Firebaseを開始
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // LIFF ID (ここはあなたのものを入れてね！)
     const LIFF_ID = '2008601973-nBb3AdkQ'; 
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycby92iMQ_xb5Hrv0iAxJiTS2kgt11dNW0EIx4k3qLUIGoLN0TWd4BTSkZWVhn1AR1ja4/exec';
-    // ★★★★★★★★★★★★★★★★★★★★★
 
     let calendar;
     let myUserId = '';
-
-    // ★便利関数：ローディング操作
-    function showLoading(msg) {
-      document.getElementById('loading-text').innerText = msg;
-      document.getElementById('loading-overlay').classList.remove('hidden');
-    }
-    
-    function hideLoading() {
-      document.getElementById('loading-overlay').classList.add('hidden');
-    }
 
     window.onload = function() {
       initCalendar();
@@ -94,14 +62,49 @@
           } else {
             liff.getProfile().then(profile => {
               myUserId = profile.userId;
-              // データ取得開始（ローディングの文字を変える）
-              showLoading("空き状況を確認中...");
-              fetchData();
+              document.getElementById('loading').innerText = "リアルタイム同期中...";
+              
+              // ★ここが爆速の秘密！「onSnapshot」
+              // データベースを見張り続けて、変更があったら瞬時に画面を書き換える
+              const colRef = collection(db, "bookings");
+              onSnapshot(colRef, (snapshot) => {
+                const events = snapshot.docs.map(doc => {
+                  const data = doc.data();
+                  const startStr = `${data.date}T${data.time}`;
+                  
+                  let className = 'status-open';
+                  let title = data.time;
+                  
+                  // 判定ロジック
+                  if (data.isBooked) {
+                    if (data.userId === myUserId) {
+                      className = 'status-mine'; // 自分
+                      title = '予約中';
+                    } else {
+                      className = 'status-full'; // 他人
+                      title = '満席';
+                    }
+                  }
+
+                  return {
+                    id: doc.id, // ドキュメントID
+                    title: title,
+                    start: startStr,
+                    classNames: [className],
+                    extendedProps: {
+                      isBooked: data.isBooked,
+                      isMine: (data.userId === myUserId)
+                    }
+                  };
+                });
+
+                // カレンダー更新
+                calendar.removeAllEvents();
+                calendar.addEventSource(events);
+                document.getElementById('loading').innerText = "";
+              });
             });
           }
-        })
-        .catch(err => {
-          showLoading("エラーが発生しました: " + err.code);
         });
     };
 
@@ -112,7 +115,6 @@
         locale: 'ja',
         height: 'auto',
         headerToolbar: { left: 'prev', center: 'title', right: 'next' },
-        
         eventClick: function(info) {
           const props = info.event.extendedProps;
           if (props.isMine) {
@@ -125,91 +127,43 @@
       calendar.render();
     }
 
-    function fetchData() {
-      fetch(GAS_URL, {
-        method: 'POST',
-        body: JSON.stringify({ 
-          action: "get_data",
-          userId: myUserId 
-        })
-      })
-      .then(res => res.json())
-      .then(data => {
-        const events = data.list.map(item => {
-          const startStr = `${item.date}T${item.time}`;
-          let className = 'status-open';
-          let title = item.time;
-          
-          if (item.isMine) {
-            className = 'status-mine';
-            title = '予約中';
-          } else if (item.isBooked) {
-            className = 'status-full';
-            title = '満席';
-          }
-          
-          return {
-            id: item.id,
-            title: title,
-            start: startStr,
-            classNames: [className],
-            extendedProps: {
-              isBooked: item.isBooked,
-              isMine: item.isMine
-            }
-          };
+    // 予約する（書き込み）
+    async function book(docId, dateObj) {
+      if(!confirm("予約しますか？")) return;
+      document.getElementById('loading').innerText = "書き込み中...";
+      
+      const p = await liff.getProfile();
+      
+      // Firestoreを直接書き換える
+      const slotRef = doc(db, "bookings", docId);
+      try {
+        await updateDoc(slotRef, {
+          isBooked: true,
+          userId: p.userId,
+          userName: p.displayName
         });
-
-        calendar.removeAllEvents();
-        calendar.addEventSource(events);
-        
-        // ★データ表示が終わったらローディングを消す！
-        hideLoading();
-      })
-      .catch(e => {
-        showLoading("通信エラー: " + e.message);
-      });
+        alert("予約しました！");
+      } catch (e) {
+        alert("エラー: " + e.message);
+      }
     }
 
-    function book(id, dateObj) {
-      const dateStr = dateObj.toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour:'2-digit', minute:'2-digit'});
-      if(!confirm(`${dateStr} を予約しますか？`)) return;
+    // キャンセルする（書き込み）
+    async function cancelBooking(docId, dateObj) {
+      if(!confirm("キャンセルしますか？")) return;
+      document.getElementById('loading').innerText = "キャンセル中...";
       
-      sendRequest("book", id, "予約処理中...");
-    }
-
-    function cancelBooking(id, dateObj) {
-      const dateStr = dateObj.toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour:'2-digit', minute:'2-digit'});
-      if(!confirm(`${dateStr} の予約をキャンセルしますか？`)) return;
-      
-      sendRequest("cancel", id, "キャンセル処理中...");
-    }
-
-    function sendRequest(actionName, slotId, loadingMsg) {
-      // ★処理中はローディングを出す
-      showLoading(loadingMsg);
-      
-      liff.getProfile().then(p => {
-        fetch(GAS_URL, {
-          method: 'POST',
-          body: JSON.stringify({ 
-            action: actionName, 
-            slotId: slotId, 
-            userId: p.userId, 
-            userName: p.displayName 
-          })
-        })
-        .then(res => res.json())
-        .then(res => {
-          alert(res.message);
-          // 再読み込み（ここでもローディングは出たまま）
-          fetchData(); 
-        })
-        .catch(err => {
-            alert("エラーが発生しました");
-            hideLoading();
+      const slotRef = doc(db, "bookings", docId);
+      try {
+        await updateDoc(slotRef, {
+          isBooked: false,
+          userId: "",
+          userName: ""
         });
-      });
+        alert("キャンセルしました");
+      } catch (e) {
+        alert("エラー: " + e.message);
+      }
     }
   </script>
 </body>
