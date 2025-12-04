@@ -8,25 +8,43 @@
   <style>
     body { font-family: sans-serif; padding: 10px; text-align: center; background-color: #f0f0f0; }
     h2 { color: #333; margin-bottom: 5px; }
-    #calendar { max-width: 100%; margin: 0 auto; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: none; } /* 最初は隠す */
+    #calendar { max-width: 100%; margin: 0 auto; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: none; }
     
     .fc-event { cursor: pointer; border: none; }
     .status-open { background-color: #06c755 !important; }
     .status-booked { background-color: #ff4b4b !important; }
     
-    /* ログインフォームのデザイン */
     #login-form {
       background: white; padding: 20px; border-radius: 8px; margin-top: 50px;
       box-shadow: 0 4px 10px rgba(0,0,0,0.1); display: inline-block;
     }
     input { padding: 10px; margin: 10px 0; width: 200px; display: block; }
     button { padding: 10px 20px; background: #333; color: white; border: none; border-radius: 5px; cursor: pointer; }
-    
-    /* ログアウトボタン用のデザイン */
     .btn-logout { background: #666 !important; font-size: 12px; margin-left: 10px; }
     
     #dashboard-header { margin-bottom: 20px; display: none; }
     #user-display { font-size: 14px; color: #333; font-weight: bold; }
+
+    /* パネル共通デザイン */
+    .panel-box {
+      background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px;
+      border: 2px solid #333; display: none; text-align: left;
+    }
+    .panel-box h3 { margin-top: 0; border-bottom: 1px solid #ddd; padding-bottom: 5px;}
+    .form-group { margin-bottom: 10px; }
+    .form-group label { display: block; font-weight: bold; margin-bottom: 5px; }
+    /* 時間のチェックボックスを少し小さく並べる */
+    .checkbox-group { display: flex; flex-wrap: wrap; gap: 5px; }
+    .checkbox-group label { 
+        display: inline-block; font-weight: normal; background: #eee; padding: 5px 8px; border-radius: 4px; font-size: 12px;
+    }
+    
+    .btn-toggle { width: 100%; margin-bottom: 10px; font-size: 14px; padding: 8px; }
+    .btn-create { background: #0096FF !important; color: white; }
+    .btn-delete { background: #FF4B4B !important; color: white; }
+    
+    .btn-exec-create { background: #0096FF !important; width: 100%; font-weight: bold; margin-top: 10px; }
+    .btn-exec-delete { background: #FF4B4B !important; width: 100%; font-weight: bold; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -43,25 +61,109 @@
   <div id="dashboard-header">
     <span id="user-display"></span>
     <button onclick="doLogout()" class="btn-logout">ログアウト</button>
+    <br><br>
+    <div style="display:flex; gap:10px;">
+      <button onclick="togglePanel('create')" class="btn-toggle btn-create">⚡️ 一括作成ツール</button>
+      <button onclick="togglePanel('delete')" class="btn-toggle btn-delete">🗑️ 一括削除ツール</button>
+    </div>
+  </div>
+
+  <div id="panel-create" class="panel-box">
+    <h3>⚡️ シフト一括作成</h3>
+    <div class="form-group">
+      <label>1. 対象の月</label>
+      <input type="month" id="create-month">
+    </div>
+    <div class="form-group">
+      <label>2. 曜日</label>
+      <div class="checkbox-group">
+        <label><input type="checkbox" name="create-dow" value="1">月</label>
+        <label><input type="checkbox" name="create-dow" value="2">火</label>
+        <label><input type="checkbox" name="create-dow" value="3">水</label>
+        <label><input type="checkbox" name="create-dow" value="4">木</label>
+        <label><input type="checkbox" name="create-dow" value="5">金</label>
+        <label><input type="checkbox" name="create-dow" value="6">土</label>
+        <label><input type="checkbox" name="create-dow" value="0">日</label>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>3. 時間</label>
+      <div class="checkbox-group">
+        <label><input type="checkbox" name="create-time" value="10:00">10:00</label>
+        <label><input type="checkbox" name="create-time" value="11:00">11:00</label>
+        <label><input type="checkbox" name="create-time" value="12:00">12:00</label>
+        <label><input type="checkbox" name="create-time" value="13:00">13:00</label>
+        <label><input type="checkbox" name="create-time" value="14:00">14:00</label>
+        <label><input type="checkbox" name="create-time" value="15:00">15:00</label>
+        <label><input type="checkbox" name="create-time" value="16:00">16:00</label>
+        <label><input type="checkbox" name="create-time" value="17:00" checked>17:00</label>
+        <label><input type="checkbox" name="create-time" value="18:00" checked>18:00</label>
+        <label><input type="checkbox" name="create-time" value="19:00" checked>19:00</label>
+        <label><input type="checkbox" name="create-time" value="20:00">20:00</label>
+        <label><input type="checkbox" name="create-time" value="21:00">21:00</label>
+        <label><input type="checkbox" name="create-time" value="22:00">22:00</label>
+      </div>
+    </div>
+    <button onclick="executeBulkCreate()" class="btn-exec-create">一括作成する！</button>
+  </div>
+
+  <div id="panel-delete" class="panel-box">
+    <h3>🗑️ シフト一括削除</h3>
+    <p style="font-size:12px; color:red;">※予約が入っている枠はスキップします。</p>
+    
+    <div class="form-group">
+      <label>1. 対象の月</label>
+      <input type="month" id="delete-month">
+    </div>
+    <div class="form-group">
+      <label>2. 曜日</label>
+      <div class="checkbox-group">
+        <label><input type="checkbox" name="delete-dow" value="1">月</label>
+        <label><input type="checkbox" name="delete-dow" value="2">火</label>
+        <label><input type="checkbox" name="delete-dow" value="3">水</label>
+        <label><input type="checkbox" name="delete-dow" value="4">木</label>
+        <label><input type="checkbox" name="delete-dow" value="5">金</label>
+        <label><input type="checkbox" name="delete-dow" value="6">土</label>
+        <label><input type="checkbox" name="delete-dow" value="0">日</label>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>3. 時間</label>
+      <div class="checkbox-group">
+        <label><input type="checkbox" name="delete-time" value="10:00">10:00</label>
+        <label><input type="checkbox" name="delete-time" value="11:00">11:00</label>
+        <label><input type="checkbox" name="delete-time" value="12:00">12:00</label>
+        <label><input type="checkbox" name="delete-time" value="13:00">13:00</label>
+        <label><input type="checkbox" name="delete-time" value="14:00">14:00</label>
+        <label><input type="checkbox" name="delete-time" value="15:00">15:00</label>
+        <label><input type="checkbox" name="delete-time" value="16:00">16:00</label>
+        <label><input type="checkbox" name="delete-time" value="17:00">17:00</label>
+        <label><input type="checkbox" name="delete-time" value="18:00">18:00</label>
+        <label><input type="checkbox" name="delete-time" value="19:00">19:00</label>
+        <label><input type="checkbox" name="delete-time" value="20:00">20:00</label>
+        <label><input type="checkbox" name="delete-time" value="21:00">21:00</label>
+        <label><input type="checkbox" name="delete-time" value="22:00">22:00</label>
+      </div>
+    </div>
+    <button onclick="executeBulkDelete()" class="btn-exec-delete">一括削除する！</button>
   </div>
 
   <div id="calendar"></div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-    // ★ signOut を追加インポート
+    import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, writeBatch, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
     import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-    // ★★★ ここにあなたの鍵を貼り直してください ★★★
-      const firebaseConfig = {
-      apiKey: "AIzaSyBp3hvhnBWSvq2TYvsTFmnOnqabnY7vx3g", 
-      authDomain: "juku-booking.firebaseapp.com",
-      projectId: "juku-booking",
-      storageBucket: "juku-booking.firebasestorage.app",
-      messagingSenderId: "134258298426",
-      appId: "1:134258298426:web:24d901ef9fc92c9b0daf03"
-    };
+    // ★★★ 鍵をここに貼り直してください！ ★★★
+    const firebaseConfig = {
+    apiKey: "AIzaSyBp3hvhnBWSvq2TYvsTFmnOnqabnY7vx3g",
+    authDomain: "juku-booking.firebaseapp.com",
+    projectId: "juku-booking",
+    storageBucket: "juku-booking.firebasestorage.app",
+    messagingSenderId: "134258298426",
+    appId: "1:134258298426:web:24d901ef9fc92c9b0daf03"
+  };
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
@@ -69,53 +171,139 @@
 
     let calendar;
 
-    // ログイン状態を監視
     onAuthStateChanged(auth, (user) => {
       if (user) {
-        // ログイン成功！
         document.getElementById('login-form').style.display = 'none';
         document.getElementById('calendar').style.display = 'block';
-        
-        // ヘッダーを表示
         document.getElementById('dashboard-header').style.display = 'block';
         document.getElementById('user-display').innerText = "Login: " + user.email;
-        
         initCalendar();
         loadData();
       } else {
-        // ログアウト状態
         document.getElementById('login-form').style.display = 'block';
         document.getElementById('calendar').style.display = 'none';
-        
-        // ヘッダーを隠す
         document.getElementById('dashboard-header').style.display = 'none';
+        document.getElementById('panel-create').style.display = 'none';
+        document.getElementById('panel-delete').style.display = 'none';
       }
     });
 
-    // ログイン実行
     window.doLogin = function() {
       const email = document.getElementById('email').value;
       const pass = document.getElementById('password').value;
-      
-      signInWithEmailAndPassword(auth, email, pass)
-        .then((userCredential) => {
-          // 成功時の処理は onAuthStateChanged に任せる
-        })
-        .catch((error) => {
-          alert("ログイン失敗: " + error.message);
-        });
+      signInWithEmailAndPassword(auth, email, pass).catch(e => alert("Error: " + e.message));
     }
 
-    // ★追加：ログアウト実行
     window.doLogout = function() {
-      if(!confirm("ログアウトしますか？")) return;
+      if(confirm("ログアウトしますか？")) signOut(auth);
+    }
+
+    window.togglePanel = function(type) {
+      const createPanel = document.getElementById('panel-create');
+      const deletePanel = document.getElementById('panel-delete');
+      if (type === 'create') {
+        createPanel.style.display = (createPanel.style.display === 'none') ? 'block' : 'none';
+        deletePanel.style.display = 'none';
+      } else {
+        deletePanel.style.display = (deletePanel.style.display === 'none') ? 'block' : 'none';
+        createPanel.style.display = 'none';
+      }
+    }
+
+    window.executeBulkCreate = async function() {
+      const monthVal = document.getElementById('create-month').value;
+      if (!monthVal) return alert("月を選択してください");
+      const dowChecks = document.querySelectorAll('input[name="create-dow"]:checked');
+      const targetDows = Array.from(dowChecks).map(c => parseInt(c.value));
+      if (targetDows.length === 0) return alert("曜日を選択してください");
+      const timeChecks = document.querySelectorAll('input[name="create-time"]:checked');
+      const targetTimes = Array.from(timeChecks).map(c => c.value);
+      if (targetTimes.length === 0) return alert("時間を選択してください");
+
+      if (!confirm(`${monthVal} の指定した日時に、予約枠を一括作成しますか？`)) return;
+
+      const [year, month] = monthVal.split('-').map(Number);
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0);
       
-      signOut(auth).then(() => {
-        alert("ログアウトしました");
-        // 画面は自動的にログインフォームに戻ります
-      }).catch((error) => {
-        alert("エラー: " + error.message);
-      });
+      const batch = writeBatch(db);
+      let count = 0;
+
+      for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+        if (targetDows.includes(d.getDay())) {
+          const y = d.getFullYear();
+          const m = ('0' + (d.getMonth() + 1)).slice(-2);
+          const day = ('0' + d.getDate()).slice(-2);
+          const dateStr = `${y}-${m}-${day}`;
+
+          targetTimes.forEach(time => {
+            const newRef = doc(collection(db, "bookings"));
+            batch.set(newRef, { date: dateStr, time: time, isBooked: false, userId: "", userName: "" });
+            count++;
+          });
+        }
+      }
+
+      if (count === 0) return alert("対象日がありませんでした");
+      if (count > 500) return alert("件数が多すぎます(500件超)");
+
+      try {
+        await batch.commit();
+        alert(`成功！ ${count}件作成しました`);
+        document.getElementById('panel-create').style.display = 'none';
+      } catch (e) {
+        alert("エラー: " + e.message);
+      }
+    }
+
+    window.executeBulkDelete = async function() {
+      const monthVal = document.getElementById('delete-month').value;
+      if (!monthVal) return alert("月を選択してください");
+      const dowChecks = document.querySelectorAll('input[name="delete-dow"]:checked');
+      const targetDows = Array.from(dowChecks).map(c => parseInt(c.value));
+      if (targetDows.length === 0) return alert("曜日を選択してください");
+      const timeChecks = document.querySelectorAll('input[name="delete-time"]:checked');
+      const targetTimes = Array.from(timeChecks).map(c => c.value);
+      if (targetTimes.length === 0) return alert("時間を選択してください");
+
+      if (!confirm(`【注意】\n${monthVal} の指定枠を一括削除しますか？\n（予約済みはスキップ）`)) return;
+
+      const [year, month] = monthVal.split('-').map(Number);
+      const startStr = `${year}-${('0'+month).slice(-2)}-01`;
+      const lastDay = new Date(year, month, 0).getDate();
+      const endStr = `${year}-${('0'+month).slice(-2)}-${lastDay}`;
+
+      const q = query(collection(db, "bookings"), 
+        where("date", ">=", startStr),
+        where("date", "<=", endStr)
+      );
+
+      try {
+        const querySnapshot = await getDocs(q);
+        const batch = writeBatch(db);
+        let deleteCount = 0;
+        let skippedCount = 0;
+
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          const dateObj = new Date(data.date);
+          if (targetDows.includes(dateObj.getDay()) && targetTimes.includes(data.time)) {
+            if (data.isBooked) {
+              skippedCount++;
+            } else {
+              batch.delete(doc.ref);
+              deleteCount++;
+            }
+          }
+        });
+
+        if (deleteCount === 0) return alert("削除対象なし");
+        await batch.commit();
+        alert(`完了！\n削除: ${deleteCount}件\nスキップ: ${skippedCount}件`);
+        document.getElementById('panel-delete').style.display = 'none';
+      } catch (e) {
+        alert("エラー: " + e.message);
+      }
     }
 
     function loadData() {
@@ -150,6 +338,8 @@
         locale: 'ja',
         height: 'auto',
         headerToolbar: { left: 'prev', center: 'title', right: 'next' },
+        
+        // ★日付タップ作成時のデフォルト時間を10:00-22:00の全枠に変更
         dateClick: function(info) { createSlots(info.dateStr); },
         eventClick: function(info) { deleteSlot(info.event.id, info.event.title); }
       });
@@ -157,8 +347,14 @@
     }
 
     async function createSlots(dateStr) {
-      if(!confirm(`${dateStr} に予約枠を作りますか？`)) return;
-      const times = ["10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00"];
+      if(!confirm(`${dateStr} に\n10:00〜22:00 の予約枠を一括作成しますか？`)) return;
+      
+      // ★ここも10:00〜22:00に変更しました！
+      const times = [
+        "10:00", "11:00", "12:00", "13:00", "14:00", "15:00",
+        "16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00"
+      ];
+      
       for (const time of times) {
         await addDoc(collection(db, "bookings"), {
           date: dateStr, time: time, isBooked: false, userId: "", userName: ""
