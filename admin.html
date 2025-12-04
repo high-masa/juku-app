@@ -4,35 +4,46 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>【管理者】予約枠設定</title>
-  
   <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
   <style>
     body { font-family: sans-serif; padding: 10px; text-align: center; background-color: #f0f0f0; }
     h2 { color: #333; margin-bottom: 5px; }
-    #calendar { max-width: 100%; margin: 0 auto; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    #calendar { max-width: 100%; margin: 0 auto; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: none; } /* 最初は隠す */
     
     .fc-event { cursor: pointer; border: none; }
+    .status-open { background-color: #06c755 !important; }
+    .status-booked { background-color: #ff4b4b !important; }
     
-    /* 管理者用の色設定 */
-    .status-empty { background-color: #ffffff; border: 2px dashed #ccc !important; color: #ccc; } /* 未作成（カレンダー背景） */
-    .status-open { background-color: #06c755 !important; } /* 空き枠 */
-    .status-booked { background-color: #ff4b4b !important; } /* 予約済み（赤） */
+    /* ログインフォームのデザイン */
+    #login-form {
+      background: white; padding: 20px; border-radius: 8px; margin-top: 50px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1); display: inline-block;
+    }
+    input { padding: 10px; margin: 10px 0; width: 200px; display: block; }
+    button { padding: 10px 20px; background: #333; color: white; border: none; border-radius: 5px; cursor: pointer; }
     
-    /* ボタン */
-    .btn-create { padding: 10px 20px; background: #333; color: white; border: none; border-radius: 5px; margin-top: 10px; cursor: pointer; }
-    
-    #loading { color: red; font-weight: bold; height: 20px; font-size: 12px; }
+    #user-display { font-size: 12px; color: #666; margin-bottom: 10px; display: none; }
   </style>
 </head>
 <body>
 
-  <h2>👨‍🏫 予約枠 管理コックピット</h2>
-  <div id="loading">DB接続中...</div>
+  <h2>👨‍🏫 管理者コックピット</h2>
+  
+  <div id="login-form">
+    <h3>管理者ログイン</h3>
+    <input type="email" id="email" placeholder="メールアドレス">
+    <input type="password" id="password" placeholder="パスワード">
+    <button onclick="doLogin()">ログイン</button>
+  </div>
+
+  <div id="user-display"></div>
   <div id="calendar"></div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    // ★認証機能(Auth)を追加
+    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
     // ★★★ あなたの鍵を貼ってください ★★★
     const firebaseConfig = {
@@ -46,110 +57,95 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+    const auth = getAuth(app); // 認証機能ON
 
     let calendar;
 
-    // 簡易パスワードロック（生徒に見られないように）
-    const PASSWORD = "1234"; // ★好きな数字に変えてください
-
-    window.onload = function() {
-      // 簡易セキュリティ
-      if(prompt("管理者パスワードを入力してください") !== PASSWORD){
-        alert("アクセス許可がありません");
-        document.body.innerHTML = "<h1>Access Denied</h1>";
-        return;
+    // ログイン状態を監視（ページを開いた時に自動チェック）
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        // ログイン成功！
+        document.getElementById('login-form').style.display = 'none';
+        document.getElementById('calendar').style.display = 'block';
+        document.getElementById('user-display').style.display = 'block';
+        document.getElementById('user-display').innerText = "Login: " + user.email;
+        
+        initCalendar();
+        loadData();
+      } else {
+        // ログアウト状態
+        document.getElementById('login-form').style.display = 'block';
+        document.getElementById('calendar').style.display = 'none';
       }
+    });
 
-      initCalendar();
+    // ログインボタンが押されたとき
+    window.doLogin = function() {
+      const email = document.getElementById('email').value;
+      const pass = document.getElementById('password').value;
       
-      // リアルタイム同期
+      signInWithEmailAndPassword(auth, email, pass)
+        .then((userCredential) => {
+          // 成功したら onAuthStateChanged が動くので何もしなくてOK
+        })
+        .catch((error) => {
+          alert("ログイン失敗: " + error.message);
+        });
+    }
+
+    function loadData() {
       const colRef = collection(db, "bookings");
       onSnapshot(colRef, (snapshot) => {
         const events = snapshot.docs.map(doc => {
           const data = doc.data();
-          const startStr = `${data.date}T${data.time}`;
-          
           let title = data.time;
           let className = 'status-open';
-          
           if (data.isBooked) {
-            className = 'status-booked'; // 予約ありは赤！
-            title = `${data.time} ${data.userName}`; // 名前を表示
+            className = 'status-booked';
+            title = `${data.time} ${data.userName}`;
           }
-
           return {
             id: doc.id,
             title: title,
-            start: startStr,
+            start: `${data.date}T${data.time}`,
             classNames: [className],
             extendedProps: { ...data }
           };
         });
-
         calendar.removeAllEvents();
         calendar.addEventSource(events);
-        document.getElementById('loading').innerText = "";
       });
-    };
+    }
 
     function initCalendar() {
+      if(calendar) return; // 二重起動防止
       var calendarEl = document.getElementById('calendar');
       calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
         locale: 'ja',
         height: 'auto',
         headerToolbar: { left: 'prev', center: 'title', right: 'next' },
-        
-        // ★日付の背景をタップしたら「枠作成」
-        dateClick: function(info) {
-          createSlots(info.dateStr);
-        },
-
-        // ★イベントをタップしたら「削除」
-        eventClick: function(info) {
-          deleteSlot(info.event.id, info.event.title);
-        }
+        dateClick: function(info) { createSlots(info.dateStr); },
+        eventClick: function(info) { deleteSlot(info.event.id, info.event.title); }
       });
       calendar.render();
     }
 
-    // 枠を一括作成する機能
     async function createSlots(dateStr) {
       if(!confirm(`${dateStr} に予約枠を作りますか？`)) return;
-      
-      // 作りたい時間セット（自由に増やせます）
       const times = ["17:00", "18:00", "19:00", "20:00"];
-      
-      document.getElementById('loading').innerText = "枠を作成中...";
-      
-      // 順番に保存していく
       for (const time of times) {
-        try {
-          await addDoc(collection(db, "bookings"), {
-            date: dateStr,
-            time: time,
-            isBooked: false,
-            userId: "",
-            userName: ""
-          });
-        } catch (e) {
-          console.error(e);
-        }
+        await addDoc(collection(db, "bookings"), {
+          date: dateStr, time: time, isBooked: false, userId: "", userName: ""
+        });
       }
-      alert("作成完了！");
-      document.getElementById('loading').innerText = "";
+      alert("作成完了");
     }
 
-    // 枠を削除する機能
     async function deleteSlot(docId, title) {
-      if(!confirm(`この枠を削除しますか？\n\n${title}`)) return;
-      
-      try {
-        await deleteDoc(doc(db, "bookings", docId));
-        alert("削除しました");
-      } catch (e) {
-        alert("エラー: " + e.message);
-      }
+      if(!confirm(`削除しますか？\n${title}`)) return;
+      await deleteDoc(doc(db, "bookings", docId));
+      alert("削除しました");
     }
   </script>
 </body>
