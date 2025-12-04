@@ -34,9 +34,21 @@
     .panel-box h3 { margin-top: 0; border-bottom: 1px solid #ddd; padding-bottom: 5px;}
     .form-group { margin-bottom: 10px; }
     .form-group label { display: block; font-weight: bold; margin-bottom: 5px; }
-    .checkbox-group { display: flex; flex-wrap: wrap; gap: 5px; }
+    
+    /* ★CSS変更1：時間をタイル状（3列グリッド）に並べる */
+    .checkbox-group { 
+        display: grid; 
+        grid-template-columns: repeat(3, 1fr); /* 3列にする */
+        gap: 10px; 
+    }
     .checkbox-group label { 
-        display: inline-block; font-weight: normal; background: #eee; padding: 5px 8px; border-radius: 4px; font-size: 12px;
+        display: flex; align-items: center; justify-content: center;
+        background: #f9f9f9; padding: 10px; border-radius: 6px; border: 1px solid #ddd;
+        font-size: 12px; cursor: pointer; text-align: center;
+    }
+    /* チェックされたら色を変えて分かりやすくする */
+    .checkbox-group label:has(input:checked) {
+        background-color: #e6f7ff; border-color: #1890ff; font-weight: bold; color: #1890ff;
     }
     
     .btn-toggle { width: 100%; margin-bottom: 10px; font-size: 14px; padding: 8px; }
@@ -46,16 +58,21 @@
     .btn-exec-create { background: #0096FF !important; width: 100%; font-weight: bold; margin-top: 10px; }
     .btn-exec-delete { background: #FF4B4B !important; width: 100%; font-weight: bold; margin-top: 10px; }
 
-    /* ★Lv.58 追加：ポップアップモーダル */
+    /* ポップアップモーダル */
     .modal-overlay {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(0,0,0,0.5); z-index: 9999;
       display: none; justify-content: center; align-items: center;
     }
+    
+    /* ★CSS変更2：ポップアップが画面からはみ出さないようにスクロールさせる */
     .modal-content {
       background: white; padding: 20px; border-radius: 8px; width: 90%; max-width: 400px; text-align: left;
       box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+      max-height: 90vh; /* 画面の高さの90%まで */
+      overflow-y: auto; /* それを超えたらスクロールバーを出す */
     }
+    
     .modal-buttons { display: flex; justify-content: space-between; margin-top: 20px; }
     .btn-cancel { background: #999 !important; color: white; }
   </style>
@@ -81,6 +98,7 @@
     </div>
   </div>
 
+  <!-- 一括作成パネル -->
   <div id="panel-create" class="panel-box">
     <h3>⚡️ シフト一括作成 (月単位)</h3>
     <div class="form-group">
@@ -120,6 +138,7 @@
     <button onclick="executeBulkCreate()" class="btn-exec-create">一括作成する！</button>
   </div>
 
+  <!-- 一括削除パネル -->
   <div id="panel-delete" class="panel-box">
     <h3>🗑️ シフト一括削除</h3>
     <p style="font-size:12px; color:red;">※予約が入っている枠はスキップします。</p>
@@ -160,6 +179,7 @@
     <button onclick="executeBulkDelete()" class="btn-exec-delete">一括削除する！</button>
   </div>
 
+  <!-- 手動作成ポップアップ -->
   <div id="manual-modal" class="modal-overlay">
     <div class="modal-content">
       <h3>📅 個別枠作成</h3>
@@ -199,7 +219,7 @@
     import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
     // ★★★ 鍵をここに貼り直してください！ ★★★
-    const firebaseConfig = {
+  const firebaseConfig = {
     apiKey: "AIzaSyBp3hvhnBWSvq2TYvsTFmnOnqabnY7vx3g",
     authDomain: "juku-booking.firebaseapp.com",
     projectId: "juku-booking",
@@ -213,7 +233,7 @@
     const auth = getAuth(app); 
 
     let calendar;
-    let selectedDateStr = ""; // 手動作成用
+    let selectedDateStr = ""; 
 
     onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -254,28 +274,23 @@
       }
     }
 
-    // ★Lv.58 追加：手動作成ポップアップを開く
     window.openManualModal = function(dateStr) {
       selectedDateStr = dateStr;
       document.getElementById('manual-date-display').innerText = dateStr;
-      // チェックボックスをリセット（お好みでデフォルトチェックを入れてもOK）
       document.querySelectorAll('input[name="manual-time"]').forEach(c => c.checked = false);
       document.getElementById('manual-modal').style.display = 'flex';
     }
 
-    // ポップアップを閉じる
     window.closeManualModal = function() {
       document.getElementById('manual-modal').style.display = 'none';
     }
 
-    // ★Lv.58 追加：手動作成実行
     window.executeManualCreate = async function() {
       const timeChecks = document.querySelectorAll('input[name="manual-time"]:checked');
       const targetTimes = Array.from(timeChecks).map(c => c.value);
       
       if (targetTimes.length === 0) return alert("時間を選択してください");
       
-      // 書き込み
       const batch = writeBatch(db);
       targetTimes.forEach(time => {
         const newRef = doc(collection(db, "bookings"));
@@ -305,18 +320,14 @@
         locale: 'ja',
         height: 'auto',
         headerToolbar: { left: 'prev', center: 'title', right: 'next' },
-        
-        // ★日付タップでポップアップを開くように変更！
         dateClick: function(info) { 
           openManualModal(info.dateStr); 
         },
-        
         eventClick: function(info) { deleteSlot(info.event.id, info.event.title); }
       });
       calendar.render();
     }
 
-    // 以下、一括作成・一括削除・ロードなどは以前と同じ
     window.executeBulkCreate = async function() {
       const monthVal = document.getElementById('create-month').value;
       if (!monthVal) return alert("月を選択してください");
