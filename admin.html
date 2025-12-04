@@ -14,6 +14,7 @@
     .status-open { background-color: #06c755 !important; }
     .status-booked { background-color: #ff4b4b !important; }
     
+    /* ログインフォーム */
     #login-form {
       background: white; padding: 20px; border-radius: 8px; margin-top: 50px;
       box-shadow: 0 4px 10px rgba(0,0,0,0.1); display: inline-block;
@@ -33,7 +34,6 @@
     .panel-box h3 { margin-top: 0; border-bottom: 1px solid #ddd; padding-bottom: 5px;}
     .form-group { margin-bottom: 10px; }
     .form-group label { display: block; font-weight: bold; margin-bottom: 5px; }
-    /* 時間のチェックボックスを少し小さく並べる */
     .checkbox-group { display: flex; flex-wrap: wrap; gap: 5px; }
     .checkbox-group label { 
         display: inline-block; font-weight: normal; background: #eee; padding: 5px 8px; border-radius: 4px; font-size: 12px;
@@ -45,6 +45,19 @@
     
     .btn-exec-create { background: #0096FF !important; width: 100%; font-weight: bold; margin-top: 10px; }
     .btn-exec-delete { background: #FF4B4B !important; width: 100%; font-weight: bold; margin-top: 10px; }
+
+    /* ★Lv.58 追加：ポップアップモーダル */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.5); z-index: 9999;
+      display: none; justify-content: center; align-items: center;
+    }
+    .modal-content {
+      background: white; padding: 20px; border-radius: 8px; width: 90%; max-width: 400px; text-align: left;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    }
+    .modal-buttons { display: flex; justify-content: space-between; margin-top: 20px; }
+    .btn-cancel { background: #999 !important; color: white; }
   </style>
 </head>
 <body>
@@ -69,7 +82,7 @@
   </div>
 
   <div id="panel-create" class="panel-box">
-    <h3>⚡️ シフト一括作成</h3>
+    <h3>⚡️ シフト一括作成 (月単位)</h3>
     <div class="form-group">
       <label>1. 対象の月</label>
       <input type="month" id="create-month">
@@ -110,7 +123,6 @@
   <div id="panel-delete" class="panel-box">
     <h3>🗑️ シフト一括削除</h3>
     <p style="font-size:12px; color:red;">※予約が入っている枠はスキップします。</p>
-    
     <div class="form-group">
       <label>1. 対象の月</label>
       <input type="month" id="delete-month">
@@ -148,6 +160,37 @@
     <button onclick="executeBulkDelete()" class="btn-exec-delete">一括削除する！</button>
   </div>
 
+  <div id="manual-modal" class="modal-overlay">
+    <div class="modal-content">
+      <h3>📅 個別枠作成</h3>
+      <p id="manual-date-display" style="font-weight:bold; color:#0096FF;"></p>
+      
+      <div class="form-group">
+        <label>作成したい時間を選択してください</label>
+        <div class="checkbox-group">
+          <label><input type="checkbox" name="manual-time" value="10:00">10:00</label>
+          <label><input type="checkbox" name="manual-time" value="11:00">11:00</label>
+          <label><input type="checkbox" name="manual-time" value="12:00">12:00</label>
+          <label><input type="checkbox" name="manual-time" value="13:00">13:00</label>
+          <label><input type="checkbox" name="manual-time" value="14:00">14:00</label>
+          <label><input type="checkbox" name="manual-time" value="15:00">15:00</label>
+          <label><input type="checkbox" name="manual-time" value="16:00">16:00</label>
+          <label><input type="checkbox" name="manual-time" value="17:00">17:00</label>
+          <label><input type="checkbox" name="manual-time" value="18:00">18:00</label>
+          <label><input type="checkbox" name="manual-time" value="19:00">19:00</label>
+          <label><input type="checkbox" name="manual-time" value="20:00">20:00</label>
+          <label><input type="checkbox" name="manual-time" value="21:00">21:00</label>
+          <label><input type="checkbox" name="manual-time" value="22:00">22:00</label>
+        </div>
+      </div>
+
+      <div class="modal-buttons">
+        <button onclick="closeManualModal()" class="btn-cancel">キャンセル</button>
+        <button onclick="executeManualCreate()" class="btn-create">作成する</button>
+      </div>
+    </div>
+  </div>
+
   <div id="calendar"></div>
 
   <script type="module">
@@ -170,6 +213,7 @@
     const auth = getAuth(app); 
 
     let calendar;
+    let selectedDateStr = ""; // 手動作成用
 
     onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -210,6 +254,69 @@
       }
     }
 
+    // ★Lv.58 追加：手動作成ポップアップを開く
+    window.openManualModal = function(dateStr) {
+      selectedDateStr = dateStr;
+      document.getElementById('manual-date-display').innerText = dateStr;
+      // チェックボックスをリセット（お好みでデフォルトチェックを入れてもOK）
+      document.querySelectorAll('input[name="manual-time"]').forEach(c => c.checked = false);
+      document.getElementById('manual-modal').style.display = 'flex';
+    }
+
+    // ポップアップを閉じる
+    window.closeManualModal = function() {
+      document.getElementById('manual-modal').style.display = 'none';
+    }
+
+    // ★Lv.58 追加：手動作成実行
+    window.executeManualCreate = async function() {
+      const timeChecks = document.querySelectorAll('input[name="manual-time"]:checked');
+      const targetTimes = Array.from(timeChecks).map(c => c.value);
+      
+      if (targetTimes.length === 0) return alert("時間を選択してください");
+      
+      // 書き込み
+      const batch = writeBatch(db);
+      targetTimes.forEach(time => {
+        const newRef = doc(collection(db, "bookings"));
+        batch.set(newRef, {
+          date: selectedDateStr,
+          time: time,
+          isBooked: false,
+          userId: "",
+          userName: ""
+        });
+      });
+
+      try {
+        await batch.commit();
+        alert(`${selectedDateStr} に ${targetTimes.length}件の枠を作成しました！`);
+        closeManualModal();
+      } catch (e) {
+        alert("エラー: " + e.message);
+      }
+    }
+
+    function initCalendar() {
+      if(calendar) return; 
+      var calendarEl = document.getElementById('calendar');
+      calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        locale: 'ja',
+        height: 'auto',
+        headerToolbar: { left: 'prev', center: 'title', right: 'next' },
+        
+        // ★日付タップでポップアップを開くように変更！
+        dateClick: function(info) { 
+          openManualModal(info.dateStr); 
+        },
+        
+        eventClick: function(info) { deleteSlot(info.event.id, info.event.title); }
+      });
+      calendar.render();
+    }
+
+    // 以下、一括作成・一括削除・ロードなどは以前と同じ
     window.executeBulkCreate = async function() {
       const monthVal = document.getElementById('create-month').value;
       if (!monthVal) return alert("月を選択してください");
@@ -328,39 +435,6 @@
         calendar.removeAllEvents();
         calendar.addEventSource(events);
       });
-    }
-
-    function initCalendar() {
-      if(calendar) return; 
-      var calendarEl = document.getElementById('calendar');
-      calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: 'dayGridMonth',
-        locale: 'ja',
-        height: 'auto',
-        headerToolbar: { left: 'prev', center: 'title', right: 'next' },
-        
-        // ★日付タップ作成時のデフォルト時間を10:00-22:00の全枠に変更
-        dateClick: function(info) { createSlots(info.dateStr); },
-        eventClick: function(info) { deleteSlot(info.event.id, info.event.title); }
-      });
-      calendar.render();
-    }
-
-    async function createSlots(dateStr) {
-      if(!confirm(`${dateStr} に\n10:00〜22:00 の予約枠を一括作成しますか？`)) return;
-      
-      // ★ここも10:00〜22:00に変更しました！
-      const times = [
-        "10:00", "11:00", "12:00", "13:00", "14:00", "15:00",
-        "16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00"
-      ];
-      
-      for (const time of times) {
-        await addDoc(collection(db, "bookings"), {
-          date: dateStr, time: time, isBooked: false, userId: "", userName: ""
-        });
-      }
-      alert("作成完了");
     }
 
     async function deleteSlot(docId, title) {
