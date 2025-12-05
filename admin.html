@@ -12,7 +12,11 @@
     
     .fc-event { cursor: pointer; border: none; }
     .status-open { background-color: #06c755 !important; }
-    .status-booked { background-color: #ff4b4b !important; }
+    
+    /* 予約タイプの色分け */
+    .status-special { background-color: #9b59b6 !important; } /* 紫 */
+    .status-makeup  { background-color: #e67e22 !important; } /* オレンジ */
+    .status-default { background-color: #ff4b4b !important; } /* その他（赤） */
     
     /* ログインフォーム */
     #login-form {
@@ -35,44 +39,21 @@
     .form-group { margin-bottom: 10px; }
     .form-group label { display: block; font-weight: bold; margin-bottom: 5px; }
     
-    /* ★CSS変更1：時間をタイル状（3列グリッド）に並べる */
-    .checkbox-group { 
-        display: grid; 
-        grid-template-columns: repeat(3, 1fr); /* 3列にする */
-        gap: 10px; 
-    }
-    .checkbox-group label { 
-        display: flex; align-items: center; justify-content: center;
-        background: #f9f9f9; padding: 10px; border-radius: 6px; border: 1px solid #ddd;
-        font-size: 12px; cursor: pointer; text-align: center;
-    }
-    /* チェックされたら色を変えて分かりやすくする */
-    .checkbox-group label:has(input:checked) {
-        background-color: #e6f7ff; border-color: #1890ff; font-weight: bold; color: #1890ff;
-    }
+    /* 時間をタイル状（3列）に並べる */
+    .checkbox-group { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .checkbox-group label { display: flex; align-items: center; justify-content: center; background: #f9f9f9; padding: 10px; border-radius: 6px; border: 1px solid #ddd; font-size: 12px; cursor: pointer; text-align: center; }
+    .checkbox-group label:has(input:checked) { background-color: #e6f7ff; border-color: #1890ff; font-weight: bold; color: #1890ff; }
     
     .btn-toggle { width: 100%; margin-bottom: 10px; font-size: 14px; padding: 8px; }
     .btn-create { background: #0096FF !important; color: white; }
     .btn-delete { background: #FF4B4B !important; color: white; }
-    
     .btn-exec-create { background: #0096FF !important; width: 100%; font-weight: bold; margin-top: 10px; }
     .btn-exec-delete { background: #FF4B4B !important; width: 100%; font-weight: bold; margin-top: 10px; }
 
-    /* ポップアップモーダル */
-    .modal-overlay {
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.5); z-index: 9999;
-      display: none; justify-content: center; align-items: center;
-    }
-    
-    /* ★CSS変更2：ポップアップが画面からはみ出さないようにスクロールさせる */
-    .modal-content {
-      background: white; padding: 20px; border-radius: 8px; width: 90%; max-width: 400px; text-align: left;
-      box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-      max-height: 90vh; /* 画面の高さの90%まで */
-      overflow-y: auto; /* それを超えたらスクロールバーを出す */
-    }
-    
+    /* 手動作成モーダル */
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; display: none; justify-content: center; align-items: center; }
+    /* スクロール対応 */
+    .modal-content { background: white; padding: 20px; border-radius: 8px; width: 90%; max-width: 400px; text-align: left; box-shadow: 0 5px 15px rgba(0,0,0,0.3); max-height: 90vh; overflow-y: auto; }
     .modal-buttons { display: flex; justify-content: space-between; margin-top: 20px; }
     .btn-cancel { background: #999 !important; color: white; }
   </style>
@@ -98,15 +79,11 @@
     </div>
   </div>
 
-  <!-- 一括作成パネル -->
+  <!-- 一括作成パネル (10:00-22:00) -->
   <div id="panel-create" class="panel-box">
-    <h3>⚡️ シフト一括作成 (月単位)</h3>
-    <div class="form-group">
-      <label>1. 対象の月</label>
-      <input type="month" id="create-month">
-    </div>
-    <div class="form-group">
-      <label>2. 曜日</label>
+    <h3>⚡️ シフト一括作成</h3>
+    <div class="form-group"><label>1. 月</label><input type="month" id="create-month"></div>
+    <div class="form-group"><label>2. 曜日</label>
       <div class="checkbox-group">
         <label><input type="checkbox" name="create-dow" value="1">月</label>
         <label><input type="checkbox" name="create-dow" value="2">火</label>
@@ -117,8 +94,7 @@
         <label><input type="checkbox" name="create-dow" value="0">日</label>
       </div>
     </div>
-    <div class="form-group">
-      <label>3. 時間</label>
+    <div class="form-group"><label>3. 時間</label>
       <div class="checkbox-group">
         <label><input type="checkbox" name="create-time" value="10:00">10:00</label>
         <label><input type="checkbox" name="create-time" value="11:00">11:00</label>
@@ -138,16 +114,12 @@
     <button onclick="executeBulkCreate()" class="btn-exec-create">一括作成する！</button>
   </div>
 
-  <!-- 一括削除パネル -->
+  <!-- 一括削除パネル (10:00-22:00) -->
   <div id="panel-delete" class="panel-box">
     <h3>🗑️ シフト一括削除</h3>
     <p style="font-size:12px; color:red;">※予約が入っている枠はスキップします。</p>
-    <div class="form-group">
-      <label>1. 対象の月</label>
-      <input type="month" id="delete-month">
-    </div>
-    <div class="form-group">
-      <label>2. 曜日</label>
+    <div class="form-group"><label>1. 月</label><input type="month" id="delete-month"></div>
+    <div class="form-group"><label>2. 曜日</label>
       <div class="checkbox-group">
         <label><input type="checkbox" name="delete-dow" value="1">月</label>
         <label><input type="checkbox" name="delete-dow" value="2">火</label>
@@ -158,8 +130,7 @@
         <label><input type="checkbox" name="delete-dow" value="0">日</label>
       </div>
     </div>
-    <div class="form-group">
-      <label>3. 時間</label>
+    <div class="form-group"><label>3. 時間</label>
       <div class="checkbox-group">
         <label><input type="checkbox" name="delete-time" value="10:00">10:00</label>
         <label><input type="checkbox" name="delete-time" value="11:00">11:00</label>
@@ -179,14 +150,13 @@
     <button onclick="executeBulkDelete()" class="btn-exec-delete">一括削除する！</button>
   </div>
 
-  <!-- 手動作成ポップアップ -->
+  <!-- 手動作成ポップアップ (10:00-22:00) -->
   <div id="manual-modal" class="modal-overlay">
     <div class="modal-content">
       <h3>📅 個別枠作成</h3>
       <p id="manual-date-display" style="font-weight:bold; color:#0096FF;"></p>
-      
       <div class="form-group">
-        <label>作成したい時間を選択してください</label>
+        <label>時間を選択</label>
         <div class="checkbox-group">
           <label><input type="checkbox" name="manual-time" value="10:00">10:00</label>
           <label><input type="checkbox" name="manual-time" value="11:00">11:00</label>
@@ -203,7 +173,6 @@
           <label><input type="checkbox" name="manual-time" value="22:00">22:00</label>
         </div>
       </div>
-
       <div class="modal-buttons">
         <button onclick="closeManualModal()" class="btn-cancel">キャンセル</button>
         <button onclick="executeManualCreate()" class="btn-create">作成する</button>
@@ -218,15 +187,15 @@
     import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, writeBatch, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
     import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-    // ★★★ 鍵をここに貼り直してください！ ★★★
-  const firebaseConfig = {
-    apiKey: "AIzaSyBp3hvhnBWSvq2TYvsTFmnOnqabnY7vx3g",
-    authDomain: "juku-booking.firebaseapp.com",
-    projectId: "juku-booking",
-    storageBucket: "juku-booking.firebasestorage.app",
-    messagingSenderId: "134258298426",
-    appId: "1:134258298426:web:24d901ef9fc92c9b0daf03"
-  };
+    // ★★★ あなたのFirebase設定キーをここに貼り付けてください ★★★
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY", 
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.firebasestorage.app",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
@@ -288,28 +257,18 @@
     window.executeManualCreate = async function() {
       const timeChecks = document.querySelectorAll('input[name="manual-time"]:checked');
       const targetTimes = Array.from(timeChecks).map(c => c.value);
-      
       if (targetTimes.length === 0) return alert("時間を選択してください");
       
       const batch = writeBatch(db);
       targetTimes.forEach(time => {
         const newRef = doc(collection(db, "bookings"));
-        batch.set(newRef, {
-          date: selectedDateStr,
-          time: time,
-          isBooked: false,
-          userId: "",
-          userName: ""
-        });
+        batch.set(newRef, { date: selectedDateStr, time: time, isBooked: false, userId: "", userName: "" });
       });
-
       try {
         await batch.commit();
         alert(`${selectedDateStr} に ${targetTimes.length}件の枠を作成しました！`);
         closeManualModal();
-      } catch (e) {
-        alert("エラー: " + e.message);
-      }
+      } catch (e) { alert("Error: " + e.message); }
     }
 
     function initCalendar() {
@@ -320,14 +279,13 @@
         locale: 'ja',
         height: 'auto',
         headerToolbar: { left: 'prev', center: 'title', right: 'next' },
-        dateClick: function(info) { 
-          openManualModal(info.dateStr); 
-        },
+        dateClick: function(info) { openManualModal(info.dateStr); },
         eventClick: function(info) { deleteSlot(info.event.id, info.event.title); }
       });
       calendar.render();
     }
 
+    // 一括作成ロジック
     window.executeBulkCreate = async function() {
       const monthVal = document.getElementById('create-month').value;
       if (!monthVal) return alert("月を選択してください");
@@ -361,19 +319,15 @@
           });
         }
       }
-
-      if (count === 0) return alert("対象日がありませんでした");
       if (count > 500) return alert("件数が多すぎます(500件超)");
-
       try {
         await batch.commit();
         alert(`成功！ ${count}件作成しました`);
         document.getElementById('panel-create').style.display = 'none';
-      } catch (e) {
-        alert("エラー: " + e.message);
-      }
+      } catch (e) { alert("Error: " + e.message); }
     }
 
+    // 一括削除ロジック
     window.executeBulkDelete = async function() {
       const monthVal = document.getElementById('delete-month').value;
       if (!monthVal) return alert("月を選択してください");
@@ -391,10 +345,7 @@
       const lastDay = new Date(year, month, 0).getDate();
       const endStr = `${year}-${('0'+month).slice(-2)}-${lastDay}`;
 
-      const q = query(collection(db, "bookings"), 
-        where("date", ">=", startStr),
-        where("date", "<=", endStr)
-      );
+      const q = query(collection(db, "bookings"), where("date", ">=", startStr), where("date", "<=", endStr));
 
       try {
         const querySnapshot = await getDocs(q);
@@ -406,12 +357,7 @@
           const data = doc.data();
           const dateObj = new Date(data.date);
           if (targetDows.includes(dateObj.getDay()) && targetTimes.includes(data.time)) {
-            if (data.isBooked) {
-              skippedCount++;
-            } else {
-              batch.delete(doc.ref);
-              deleteCount++;
-            }
+            if (data.isBooked) { skippedCount++; } else { batch.delete(doc.ref); deleteCount++; }
           }
         });
 
@@ -419,11 +365,10 @@
         await batch.commit();
         alert(`完了！\n削除: ${deleteCount}件\nスキップ: ${skippedCount}件`);
         document.getElementById('panel-delete').style.display = 'none';
-      } catch (e) {
-        alert("エラー: " + e.message);
-      }
+      } catch (e) { alert("Error: " + e.message); }
     }
 
+    // 読み込み（色分け表示）
     function loadData() {
       const colRef = collection(db, "bookings");
       onSnapshot(colRef, (snapshot) => {
@@ -431,9 +376,19 @@
           const data = doc.data();
           let title = data.time;
           let className = 'status-open';
+          
           if (data.isBooked) {
-            className = 'status-booked';
-            title = `${data.time} ${data.userName}`;
+            const type = data.courseType;
+            if(type === 'special') {
+                className = 'status-special';
+                title = `${data.time} ${data.userName} (特)`;
+            } else if(type === 'makeup') {
+                className = 'status-makeup';
+                title = `${data.time} ${data.userName} (振)`;
+            } else {
+                className = 'status-default';
+                title = `${data.time} ${data.userName}`;
+            }
           }
           return {
             id: doc.id,
