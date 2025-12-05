@@ -68,12 +68,11 @@
     // ルール：キャンセルは60分前まで
     const CANCEL_LIMIT_MINUTES = 60; 
 
-    // ★重要：iPhoneでもズレない強力な日時変換関数
+    // ★日時変換関数（iPhone対応）
     function parseLocalTime(dateStr, timeStr) {
-      // dateStr: "2025-12-05", timeStr: "17:00"
+      if(!dateStr || !timeStr) return new Date(); // エラー回避
       const [y, m, d] = dateStr.split('-').map(Number);
       const [hr, min] = timeStr.split(':').map(Number);
-      // 月は0始まりなので -1 する
       return new Date(y, m - 1, d, hr, min);
     }
 
@@ -101,16 +100,15 @@
               const events = snapshot.docs.map(doc => {
                 const data = doc.data();
                 
-                // ★ここを修正：強力な関数を使う
+                // ★判定用：過去かどうか
                 const slotDate = parseLocalTime(data.date, data.time);
                 const now = new Date();
-                const isPast = slotDate < now; // 過去判定
+                const isPast = slotDate < now;
 
                 let className = 'status-open';
                 let title = data.time;
                 let isClickable = true;
 
-                // 予約済みの場合
                 if (data.isBooked) {
                   if (data.userId === myUserId) {
                     className = 'status-mine';
@@ -129,19 +127,18 @@
                   }
                 }
 
-                // カレンダー表示用の開始時間文字列 (ISO形式)
-                // FullCalendar用には単純連結でOK（表示だけならズレても問題ないため）
-                const startStr = `${data.date}T${data.time}`;
-
                 return {
                   id: doc.id,
                   title: title,
-                  start: startStr,
+                  start: `${data.date}T${data.time}`,
                   classNames: [className],
+                  // ★重要：Dateオブジェクトではなく、文字データのまま持たせる
+                  // (DateオブジェクトはFullCalendar内で壊れる可能性があるため)
                   extendedProps: {
                     isBooked: data.isBooked,
                     isMine: (data.userId === myUserId),
-                    slotDate: slotDate, // 正しいDateオブジェクトを持たせる
+                    dateStr: data.date, // 文字で保持
+                    timeStr: data.time, // 文字で保持
                     isClickable: isClickable
                   }
                 };
@@ -166,17 +163,19 @@
         eventClick: function(info) {
           const props = info.event.extendedProps;
           
+          // ★ここで再生成！文字データから正しいDateを作る
+          const slotDate = parseLocalTime(props.dateStr, props.timeStr);
+
           // 触れない枠（他人・過去の空き）
           if (!props.isClickable && !props.isMine) {
-             // 自分の予約でなく、かつClickableがfalseなら終了
-             // （自分の予約なら過去でもキャンセル判定に進ませて、そこで期限チェックする）
+             // 自分の予約なら過去でもキャンセル判定に進ませる
              if (!props.isMine) return;
           }
 
           if (props.isMine) {
-            cancelBooking(info.event.id, props.slotDate);
+            cancelBooking(info.event.id, slotDate);
           } else if (!props.isBooked) {
-            book(info.event.id, props.slotDate);
+            book(info.event.id, slotDate);
           }
         }
       });
@@ -184,7 +183,7 @@
     }
 
     async function book(docId, slotDate) {
-      // ★ここでも再チェック
+      // ★デバッグ用：念のため今の日時と比較
       if (slotDate < new Date()) {
         return alert("【エラー】\nすでに終了している時間です。\n画面を更新してください。");
       }
@@ -208,12 +207,12 @@
     async function cancelBooking(docId, slotDate) {
       const now = new Date();
       // 残り時間（分）
-      const diffMs = slotDate - now;
+      const diffMs = slotDate.getTime() - now.getTime(); // .getTime()で確実に数値化
       const diffMinutes = diffMs / (1000 * 60);
 
-      // 過去の予約（マイナス）または、60分切ってる場合
+      // ★60分前チェック (デバッグ情報を表示したくない場合はアラート内の数値を消してください)
       if (diffMinutes < CANCEL_LIMIT_MINUTES) {
-        alert(`【キャンセル不可】\n授業開始の ${CANCEL_LIMIT_MINUTES}分前 を過ぎているため、ここからはキャンセルできません。\n\nお手数ですが、教室までお電話ください。`);
+        alert(`【キャンセル不可】\n授業開始の ${CANCEL_LIMIT_MINUTES}分前 を過ぎているため、キャンセルできません。\n(残り約 ${Math.floor(diffMinutes)} 分)`);
         return; 
       }
 
