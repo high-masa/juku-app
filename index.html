@@ -27,85 +27,104 @@
   <div id="calendar"></div>
 
   <script type="module">
-    // 必要な機能をインポート（Googleの倉庫から取ってくる）
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getFirestore, collection, doc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-    // ★★★ さっきメモした「鍵」をここに貼り付けてください！ ★★★
+    // ★★★ 鍵貼り付けエリア ★★★
     const firebaseConfig = {
-      apiKey: "AIzaSyBp3hvhnBWSvq2TYvsTFmnOnqabnY7vx3g", 
-      authDomain: "juku-booking.firebaseapp.com",
-      projectId: "juku-booking",
-      storageBucket: "juku-booking.firebasestorage.app",
-      messagingSenderId: "134258298426",
-      appId: "1:134258298426:web:24d901ef9fc92c9b0daf03"
-    };
-    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    apiKey: "AIzaSyBp3hvhnBWSvq2TYvsTFmnOnqabnY7vx3g",
+    authDomain: "juku-booking.firebaseapp.com",
+    projectId: "juku-booking",
+    storageBucket: "juku-booking.firebasestorage.app",
+    messagingSenderId: "134258298426",
+    appId: "1:134258298426:web:24d901ef9fc92c9b0daf03"
+  };
 
-    // Firebaseを開始
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // LIFF ID (ここはあなたのものを入れてね！)
-    const LIFF_ID = '2008601973-nBb3AdkQ'; 
+    const LIFF_ID = '2008601973-nBb3AdkQ'; // ★書き換え忘れずに！
 
     let calendar;
     let myUserId = '';
 
+    // ★ルール変更：ここを「60分」に設定！
+    const CANCEL_LIMIT_MINUTES = 60; 
+
+    // ★便利関数：ローディング操作
+    function showLoading(msg) {
+      document.getElementById('loading-text').innerText = msg;
+      document.getElementById('loading-overlay').classList.remove('hidden');
+    }
+    
+    function hideLoading() {
+      document.getElementById('loading-overlay').classList.add('hidden');
+    }
+
     window.onload = function() {
       initCalendar();
       
-      liff.init({ liffId: LIFF_ID })
-        .then(() => {
-          if (!liff.isLoggedIn()) {
-            liff.login();
-          } else {
-            liff.getProfile().then(profile => {
-              myUserId = profile.userId;
-              document.getElementById('loading').innerText = "リアルタイム同期中...";
-              
-              // ★ここが爆速の秘密！「onSnapshot」
-              // データベースを見張り続けて、変更があったら瞬時に画面を書き換える
-              const colRef = collection(db, "bookings");
-              onSnapshot(colRef, (snapshot) => {
-                const events = snapshot.docs.map(doc => {
-                  const data = doc.data();
-                  const startStr = `${data.date}T${data.time}`;
-                  
-                  let className = 'status-open';
-                  let title = data.time;
-                  
-                  // 判定ロジック
-                  if (data.isBooked) {
-                    if (data.userId === myUserId) {
-                      className = 'status-mine'; // 自分
-                      title = '予約中';
-                    } else {
-                      className = 'status-full'; // 他人
-                      title = '満席';
-                    }
+      liff.init({ liffId: LIFF_ID }).then(() => {
+        if (!liff.isLoggedIn()) {
+          liff.login();
+        } else {
+          liff.getProfile().then(profile => {
+            myUserId = profile.userId;
+            showLoading("リアルタイム同期中...");
+            
+            const colRef = collection(db, "bookings");
+            onSnapshot(colRef, (snapshot) => {
+              const events = snapshot.docs.map(doc => {
+                const data = doc.data();
+                const startStr = `${data.date}T${data.time}`;
+                
+                // 時間判定
+                const slotDate = new Date(startStr);
+                const now = new Date();
+                const isPast = slotDate < now;
+
+                let className = 'status-open';
+                let title = data.time;
+                let isClickable = true;
+
+                if (data.isBooked) {
+                  if (data.userId === myUserId) {
+                    className = 'status-mine';
+                    title = '予約中';
+                  } else {
+                    className = 'status-full';
+                    title = '満席';
+                    isClickable = false;
                   }
+                } else {
+                  if (isPast) {
+                    className = 'status-full';
+                    title = '終了';
+                    isClickable = false;
+                  }
+                }
 
-                  return {
-                    id: doc.id, // ドキュメントID
-                    title: title,
-                    start: startStr,
-                    classNames: [className],
-                    extendedProps: {
-                      isBooked: data.isBooked,
-                      isMine: (data.userId === myUserId)
-                    }
-                  };
-                });
-
-                // カレンダー更新
-                calendar.removeAllEvents();
-                calendar.addEventSource(events);
-                document.getElementById('loading').innerText = "";
+                return {
+                  id: doc.id,
+                  title: title,
+                  start: startStr,
+                  classNames: [className],
+                  extendedProps: {
+                    isBooked: data.isBooked,
+                    isMine: (data.userId === myUserId),
+                    slotDate: slotDate,
+                    isClickable: isClickable
+                  }
+                };
               });
+
+              calendar.removeAllEvents();
+              calendar.addEventSource(events);
+              hideLoading();
             });
-          }
-        });
+          });
+        }
+      });
     };
 
     function initCalendar() {
@@ -117,52 +136,63 @@
         headerToolbar: { left: 'prev', center: 'title', right: 'next' },
         eventClick: function(info) {
           const props = info.event.extendedProps;
+          if (!props.isClickable && !props.isMine) return;
+
           if (props.isMine) {
-            cancelBooking(info.event.id, info.event.start);
+            cancelBooking(info.event.id, props.slotDate);
           } else if (!props.isBooked) {
-            book(info.event.id, info.event.start);
+            book(info.event.id, props.slotDate);
           }
         }
       });
       calendar.render();
     }
 
-    // 予約する（書き込み）
-    async function book(docId, dateObj) {
+    async function book(docId, slotDate) {
+      if (slotDate < new Date()) {
+        return alert("過去の日時は予約できません。");
+      }
+
       if(!confirm("予約しますか？")) return;
-      document.getElementById('loading').innerText = "書き込み中...";
+      showLoading("書き込み中...");
       
       const p = await liff.getProfile();
-      
-      // Firestoreを直接書き換える
       const slotRef = doc(db, "bookings", docId);
       try {
         await updateDoc(slotRef, {
-          isBooked: true,
-          userId: p.userId,
-          userName: p.displayName
+          isBooked: true, userId: p.userId, userName: p.displayName
         });
         alert("予約しました！");
       } catch (e) {
         alert("エラー: " + e.message);
+        hideLoading();
       }
     }
 
-    // キャンセルする（書き込み）
-    async function cancelBooking(docId, dateObj) {
+    async function cancelBooking(docId, slotDate) {
+      const now = new Date();
+      // 残り時間を「分」で計算
+      const diffMs = slotDate - now;
+      const diffMinutes = diffMs / (1000 * 60);
+
+      // ★60分前チェック
+      if (diffMinutes < CANCEL_LIMIT_MINUTES) {
+        alert(`【キャンセル不可】\n授業開始の ${CANCEL_LIMIT_MINUTES}分前 を過ぎているため、ここからはキャンセルできません。\n\nお手数ですが、教室までお電話ください。`);
+        return; 
+      }
+
       if(!confirm("キャンセルしますか？")) return;
-      document.getElementById('loading').innerText = "キャンセル中...";
+      showLoading("キャンセル中...");
       
       const slotRef = doc(db, "bookings", docId);
       try {
         await updateDoc(slotRef, {
-          isBooked: false,
-          userId: "",
-          userName: ""
+          isBooked: false, userId: "", userName: ""
         });
         alert("キャンセルしました");
       } catch (e) {
         alert("エラー: " + e.message);
+        hideLoading();
       }
     }
   </script>
