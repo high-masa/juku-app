@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>カレンダー予約 (juku-magic)</title>
+  <title>カレンダー予約</title>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2.1/sdk.js"></script>
   <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
   
@@ -14,23 +14,40 @@
     .status-open { background-color: #06c755 !important; }
     .status-full { background-color: #aaaaaa !important; pointer-events: none; }
     .status-mine { background-color: #3788d8 !important; }
-    h2 { margin-bottom: 5px; }
     
-    /* ローディング（一瞬で終わるので簡易的に） */
-    #loading { color: #666; font-size: 12px; height: 20px; }
+    h2 { margin-bottom: 5px; }
+
+    #loading-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(255, 255, 255, 0.9);
+      display: flex; justify-content: center; align-items: center;
+      flex-direction: column; z-index: 9999; transition: opacity 0.3s;
+    }
+    .hidden { opacity: 0; pointer-events: none; }
+    .spinner {
+      width: 50px; height: 50px;
+      border: 5px solid #f3f3f3; border-top: 5px solid #06c755;
+      border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 15px;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    #loading-text { color: #555; font-weight: bold; font-size: 14px; }
   </style>
 </head>
 <body>
 
-  <h2>特別授業の予約 </h2>
-  <div id="loading">システム接続中...</div>
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <div id="loading-text">システム起動中...</div>
+  </div>
+
+  <h2>個別指導 カレンダー</h2>
   <div id="calendar"></div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getFirestore, collection, doc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-    // ★★★ 鍵貼り付けエリア ★★★
+    // ★★★ 鍵貼り付けエリア（ご自身のものに！） ★★★
     const firebaseConfig = {
     apiKey: "AIzaSyBp3hvhnBWSvq2TYvsTFmnOnqabnY7vx3g",
     authDomain: "juku-booking.firebaseapp.com",
@@ -48,15 +65,22 @@
     let calendar;
     let myUserId = '';
 
-    // ★ルール変更：ここを「60分」に設定！
+    // ルール：キャンセルは60分前まで
     const CANCEL_LIMIT_MINUTES = 60; 
 
-    // ★便利関数：ローディング操作
+    // ★重要：iPhoneでもズレない強力な日時変換関数
+    function parseLocalTime(dateStr, timeStr) {
+      // dateStr: "2025-12-05", timeStr: "17:00"
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const [hr, min] = timeStr.split(':').map(Number);
+      // 月は0始まりなので -1 する
+      return new Date(y, m - 1, d, hr, min);
+    }
+
     function showLoading(msg) {
       document.getElementById('loading-text').innerText = msg;
       document.getElementById('loading-overlay').classList.remove('hidden');
     }
-    
     function hideLoading() {
       document.getElementById('loading-overlay').classList.add('hidden');
     }
@@ -76,17 +100,17 @@
             onSnapshot(colRef, (snapshot) => {
               const events = snapshot.docs.map(doc => {
                 const data = doc.data();
-                const startStr = `${data.date}T${data.time}`;
                 
-                // 時間判定
-                const slotDate = new Date(startStr);
+                // ★ここを修正：強力な関数を使う
+                const slotDate = parseLocalTime(data.date, data.time);
                 const now = new Date();
-                const isPast = slotDate < now;
+                const isPast = slotDate < now; // 過去判定
 
                 let className = 'status-open';
                 let title = data.time;
                 let isClickable = true;
 
+                // 予約済みの場合
                 if (data.isBooked) {
                   if (data.userId === myUserId) {
                     className = 'status-mine';
@@ -94,15 +118,20 @@
                   } else {
                     className = 'status-full';
                     title = '満席';
-                    isClickable = false;
+                    isClickable = false; 
                   }
                 } else {
+                  // 空き枠だけど、過去ならNG
                   if (isPast) {
                     className = 'status-full';
                     title = '終了';
                     isClickable = false;
                   }
                 }
+
+                // カレンダー表示用の開始時間文字列 (ISO形式)
+                // FullCalendar用には単純連結でOK（表示だけならズレても問題ないため）
+                const startStr = `${data.date}T${data.time}`;
 
                 return {
                   id: doc.id,
@@ -112,7 +141,7 @@
                   extendedProps: {
                     isBooked: data.isBooked,
                     isMine: (data.userId === myUserId),
-                    slotDate: slotDate,
+                    slotDate: slotDate, // 正しいDateオブジェクトを持たせる
                     isClickable: isClickable
                   }
                 };
@@ -136,7 +165,13 @@
         headerToolbar: { left: 'prev', center: 'title', right: 'next' },
         eventClick: function(info) {
           const props = info.event.extendedProps;
-          if (!props.isClickable && !props.isMine) return;
+          
+          // 触れない枠（他人・過去の空き）
+          if (!props.isClickable && !props.isMine) {
+             // 自分の予約でなく、かつClickableがfalseなら終了
+             // （自分の予約なら過去でもキャンセル判定に進ませて、そこで期限チェックする）
+             if (!props.isMine) return;
+          }
 
           if (props.isMine) {
             cancelBooking(info.event.id, props.slotDate);
@@ -149,8 +184,9 @@
     }
 
     async function book(docId, slotDate) {
+      // ★ここでも再チェック
       if (slotDate < new Date()) {
-        return alert("過去の日時は予約できません。");
+        return alert("【エラー】\nすでに終了している時間です。\n画面を更新してください。");
       }
 
       if(!confirm("予約しますか？")) return;
@@ -171,11 +207,11 @@
 
     async function cancelBooking(docId, slotDate) {
       const now = new Date();
-      // 残り時間を「分」で計算
+      // 残り時間（分）
       const diffMs = slotDate - now;
       const diffMinutes = diffMs / (1000 * 60);
 
-      // ★60分前チェック
+      // 過去の予約（マイナス）または、60分切ってる場合
       if (diffMinutes < CANCEL_LIMIT_MINUTES) {
         alert(`【キャンセル不可】\n授業開始の ${CANCEL_LIMIT_MINUTES}分前 を過ぎているため、ここからはキャンセルできません。\n\nお手数ですが、教室までお電話ください。`);
         return; 
